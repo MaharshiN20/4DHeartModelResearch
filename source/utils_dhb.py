@@ -30,7 +30,10 @@ def load_data_echonet(logger, data_dir):
     # file with data as a pandas series
     data_info = pd.read_csv(str(data_dir / 'FileList.csv'))
     # get filenames of video (without the extension .avi) and add them as a new column "globalID" to the pandas df "data_info"
-    data_info['globalID'] = data_info['FileName'].apply(lambda s: s[:-4]).astype('string')
+    # EchoNet FileList can contain names with or without ".avi" depending on dataset export.
+    data_info['globalID'] = data_info['FileName'].apply(
+        lambda s: str(s)[:-4] if str(s).lower().endswith('.avi') else str(s)
+    ).astype('string')
     
     # set the index for rows to be the column "globalID" instead of the row number
     data_info.set_index('globalID', inplace=True)
