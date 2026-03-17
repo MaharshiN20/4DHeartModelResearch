@@ -15,3 +15,5 @@ imageio>=2.21.0
 networkx>=2.8
 tqdm>=4.64.0
 tensorflow>=2.11.0
+xvfbwrapper>=0.2.9
+vtk>=9.2.0

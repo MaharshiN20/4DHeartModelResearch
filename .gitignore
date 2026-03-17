@@ -85,5 +85,9 @@ heart_mesh/shape_models/
 source/configs/trained_models_configs/
 trained_models/
 
+# Local SSH keys
+sshResearch
+sshResearch.pub
+
 /predicted_poly.vtp/
 /notebooks/

@@ -279,18 +279,22 @@ class MeshDataset(ABC):
         for folder in transform_matrices_folder.iterdir():
             if folder.is_dir():
                 matrices_path = folder / "matrices.npz"
-                loaded_data = np.load(matrices_path, allow_pickle=True)
-                loaded_ds_factors = list(loaded_data['ds_factors'])
-                if self.ds_factors == loaded_ds_factors:
-                    logger.info(f"Found transform matrices in folder {folder}...")
-                    logger.info("Skip generating and load matrices and meshes...")
-                    V = loaded_data['V']
-                    A = loaded_data['A']
-                    D = loaded_data['D']
-                    U = loaded_data['U']
-                    
-                    matrices_loaded = True
-                    logger.info("Loaded matrices")
+                try:
+                    loaded_data = np.load(matrices_path, allow_pickle=True)
+                    loaded_ds_factors = list(loaded_data['ds_factors'])
+                    if self.ds_factors == loaded_ds_factors:
+                        logger.info(f"Found transform matrices in folder {folder}...")
+                        logger.info("Skip generating and load matrices and meshes...")
+                        V = loaded_data['V']
+                        A = loaded_data['A']
+                        D = loaded_data['D']
+                        U = loaded_data['U']
+                        
+                        matrices_loaded = True
+                        logger.info("Loaded matrices")
+                except (KeyError, FileNotFoundError) as e:
+                    logger.debug(f"Cache file corrupted or incomplete: {matrices_path}. Regenerating...")
+                    continue
 
         if not matrices_loaded: # could not find file containing transform matrices to load from, generate them and save
             logger.info("Generating and saving Transform Matrices and meshes...")
@@ -312,7 +316,13 @@ class MeshDataset(ABC):
             matrices_folder = transform_matrices_folder / folder_name
             matrices_folder.mkdir(parents=True, exist_ok=True)
             matrices_file = matrices_folder / "matrices.npz"
-            np.savez_compressed(matrices_file, V=V, A=A, D=D, U=U, ds_factors=self.ds_factors)
+            # Convert all lists to object arrays to handle inhomogeneous shapes
+            V_arr = np.array(V, dtype=object)
+            A_arr = np.array(A, dtype=object)
+            D_arr = np.array(D, dtype=object)
+            U_arr = np.array(U, dtype=object)
+            ds_factors_arr = np.array(self.ds_factors, dtype=object)
+            np.savez_compressed(matrices_file, V=V_arr, A=A_arr, D=D_arr, U=U_arr, ds_factors=ds_factors_arr)
             ds_polys_folder = matrices_folder / "ds_polys"
             ds_polys_folder.mkdir(parents=True, exist_ok=True)
             for i, poly in enumerate(M): # for each mesh in the sequence of downsampled meshes
@@ -2045,7 +2055,7 @@ class CONRADData_DHB(MeshDataset):
                 n_points = poly_data.GetNumberOfPoints() # number of vertices in the poly
                 for mode, v in enumerate(eigs): # for each eigenvalue
                     attr = numpy_to_vtk(
-                        np.repeat(v, n_points).astype(np.float)) # create array with eigenvalue repeated n_points = nb_vertices times
+                        np.repeat(v, n_points).astype(float)) # create array with eigenvalue repeated n_points = nb_vertices times
                     attr.SetName(f"eig_mode_{mode + 1}") # name the array
                     poly_data.GetPointData().AddArray(attr) # save the array in the corresponding poly, the array is saved as
                                                             # point data array in the PointData object
@@ -2054,7 +2064,7 @@ class CONRADData_DHB(MeshDataset):
 
                 component_nb = CONRAD_COMPONENTS_TO_IDS[components[i]] # get the index nb of the i'th component
                 attr = numpy_to_vtk(
-                    np.repeat(component_nb, n_points).astype(np.float)) # create array with component index repeated n_points times
+                    np.repeat(component_nb, n_points).astype(float)) # create array with component index repeated n_points times
                 attr.SetName(f"components") # name the array
                 poly_data.GetPointData().AddArray(attr) # save array to poly object
                 poly_data.GetPointData().SetActiveScalars(f"components")
@@ -2437,7 +2447,7 @@ class CONRADData(MeshDataset):
                 n_points = poly_data.GetNumberOfPoints() # number of vertices in the poly
                 for mode, v in enumerate(eigs): # for each eigenvalue
                     attr = numpy_to_vtk(
-                        np.repeat(v, n_points).astype(np.float)) # create array with eigenvalue repeated n_points = nb_vertices times
+                        np.repeat(v, n_points).astype(float)) # create array with eigenvalue repeated n_points = nb_vertices times
                     attr.SetName(f"eig_mode_{mode + 1}") # name the array
                     poly_data.GetPointData().AddArray(attr) # save the array in the corresponding poly, the array is saved as
                                                             # point data array in the PointData object
@@ -2446,7 +2456,7 @@ class CONRADData(MeshDataset):
                 
                 component_nb = CONRAD_COMPONENTS_TO_IDS[components[i]] # get the index nb of the i'th component
                 attr = numpy_to_vtk(
-                    np.repeat(component_nb, n_points).astype(np.float)) # create array with component number "i" repeated n_points times
+                    np.repeat(component_nb, n_points).astype(float)) # create array with component number "i" repeated n_points times
                 attr.SetName(f"components") # name the array
                 poly_data.GetPointData().AddArray(attr) # save array to poly object
                 poly_data.GetPointData().SetActiveScalars(f"components")
