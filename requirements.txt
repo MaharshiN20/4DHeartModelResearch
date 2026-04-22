@@ -17,3 +17,4 @@ tqdm>=4.64.0
 tensorflow>=2.11.0
 xvfbwrapper>=0.2.9
 vtk>=9.2.0
+trimesh>=3.9.0
