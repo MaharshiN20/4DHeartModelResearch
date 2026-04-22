@@ -5,6 +5,7 @@ import scipy.sparse as sp
 from chumpy.utils import row, col
 import vtk
 from vtk.util.numpy_support import vtk_to_numpy
+import trimesh
 from source.shape_model_utils import overwrite_vtkpoly
 
 
@@ -98,11 +99,13 @@ def setup_deformation_transfer(source_poly, target_poly, use_normals=False):
     coeffs_n = np.zeros(3 * target_v.shape[0])
 
     source_mesh = convert_vtk_to_mesh(source_poly)
-    nearest_faces, nearest_parts, nearest_vertices = \
-        source_mesh.compute_aabb_tree().nearest(target_v, True)
-    nearest_faces = nearest_faces.ravel().astype(np.int64)
-    nearest_parts = nearest_parts.ravel().astype(np.int64)
-    nearest_vertices = nearest_vertices.ravel()
+    # Use trimesh's proximity methods instead of psbody's AABB tree
+    from trimesh.proximity import closest_point
+    closest_points, distances, triangle_id = closest_point(source_mesh, target_v)
+    
+    nearest_faces = triangle_id.ravel().astype(np.int64)
+    nearest_parts = np.zeros_like(nearest_faces)  # Default to face (0)
+    nearest_vertices = closest_points.ravel()
 
     for i in range(target_v.shape[0]):
         # Closest triangle index
@@ -167,7 +170,6 @@ def qslim_decimator_transformer(poly_data, factor=None, n_verts_desired=None):
     Qv = vertex_quadrics(verts=orig_verts, faces=orig_faces)
 
     # fill out a sparse matrix indicating vertex-vertex adjacency
-    # from psbody.mesh.topology.connectivity import get_vertices_per_edge
     vert_adj = get_vertices_per_edge(verts=orig_verts, faces=orig_faces)
     # vert_adj = sp.lil_matrix((len(mesh.v), len(mesh.v)))
     # for f_idx in range(len(mesh.f)):
@@ -330,15 +332,14 @@ def generate_transform_matrices(poly_data, factors):
 
 
 def convert_vtk_to_mesh(poly_data):
-    """Converts a vtk polydata mesh into a ply file and returns the ply
-    mesh"""
-    from psbody.mesh import Mesh
+    """Converts a vtk polydata mesh into a trimesh object"""
+    import trimesh
 
     verts = _get_poly_vertices(poly_data)
     faces = _get_poly_faces(poly_data)
 
-    ply_mesh = Mesh(v=verts, f=faces)
-    return ply_mesh
+    mesh = trimesh.Trimesh(vertices=verts, faces=faces, process=False)
+    return mesh
 
 
 def _get_poly_vertices(poly_data):
