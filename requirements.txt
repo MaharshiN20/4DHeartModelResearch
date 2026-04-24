@@ -14,7 +14,7 @@ chumpy>=0.70
 imageio>=2.9.0
 networkx>=2.5
 tqdm>=4.50.0
-tensorflow>=2.8.0
+tensorflow==2.6.2
 xvfbwrapper>=0.2.9
 vtk>=8.1.0
 trimesh>=3.9.0
