@@ -334,7 +334,7 @@ def get_alive_jobs(parallel_jobs):
         if process.is_alive():
             alive_jobs.append(process)
         else:
-            process.close() # close job and release ressources
+            process.join() # join to clean up resources
     return alive_jobs
     
 def wait_parallel_job_completion(parallel_jobs, max_parallel_jobs, verbose=False):
