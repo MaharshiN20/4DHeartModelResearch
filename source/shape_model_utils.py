@@ -1351,14 +1351,15 @@ def get_mean_point(polys):
 
 
 def extract_component_cells(poly, component, cells_ids):
-    thresholdfilter = vtk.vtkThreshold()
-    thresholdfilter.SetInputData(poly)
-    thresholdfilter.SetLowerThreshold(component)
-    thresholdfilter.SetUpperThreshold(component)
-    thresholdfilter.Update()
-    component_poly = thresholdfilter.GetOutput()
-
-    # extract selection
+    """Extract component cells using numpy instead of VTK threshold for compatibility"""
+    # Get cell data and extract component cells
+    cell_data = poly.GetCellData()
+    
+    # Create output polydata for component
+    component_poly = vtk.vtkPolyData()
+    component_poly.DeepCopy(poly)
+    
+    # Extract selection using vtkExtractSelectedIds
     selectionNode = vtk.vtkSelectionNode()
     selectionNode.SetFieldType(vtk.vtkSelectionNode.CELL)
     selectionNode.SetContentType(vtk.vtkSelectionNode.INDICES)
@@ -1368,7 +1369,7 @@ def extract_component_cells(poly, component, cells_ids):
     selection.AddNode(selectionNode)
 
     extractSelectedIds = vtk.vtkExtractSelectedIds()
-    extractSelectedIds.SetInputConnection(0, thresholdfilter.GetOutputPort())
+    extractSelectedIds.SetInputData(0, poly)
     extractSelectedIds.SetInputData(1, selection)
     extractSelectedIds.Update()
 
