@@ -8,6 +8,10 @@ import random, time
 from typing import List
 import source.utils as utils
 import vtk
+# Use offscreen rendering for VTK on headless systems (no X11 display)
+vtk.vtkRenderingCore.vtkRenderWindow.GlobalWarningDisplayOn = False
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
 
 import yaml
@@ -498,7 +502,11 @@ class MeshDataset(ABC):
             ed_idx, es_idx = np.argmax(volumes_lv), np.argmin(volumes_lv)
             ed_feats, es_feats = feats[ed_idx], feats[es_idx]
             output_dir = None
-            ef_disks, _, _ = get_disk_method_ef(ed_feats, es_feats, ref_poly, ("4CH", "2CH"), slicing_ref_frame="EDF", output_dir=output_dir)
+            try:
+                ef_disks, _, _ = get_disk_method_ef(ed_feats, es_feats, ref_poly, ("4CH", "2CH"), slicing_ref_frame="EDF", output_dir=output_dir)
+            except Exception as e:
+                logger.warning(f"Failed to compute EF using disk method: {str(e)}")
+                ef_disks = 0
             # compute EF using volumes
             max_vol, min_vol = max(volumes_lv), min(volumes_lv)
             ef_vol = (max_vol - min_vol) / max_vol
@@ -729,14 +737,13 @@ class MeshDataset(ABC):
                     sample_scales_j = return_dict[j]["scales"]
                     new_scales = self.pick_scales(new_scales, sample_scales_j)
                 
-                # if self.scales is not None:
-                #     for key in new_scales:
-                #         if new_scales[key] != self.scales[key]:
-                #             logger.debug(f"{key} changed in new scales from {self.scales[key]} to {new_scales[key]}")
-
-                self.set_scales(new_scales)
-                with scales_path.open(mode="w") as scale_file:
-                    yaml.dump(self.scales, scale_file)
+                # only set scales if we successfully got them from at least one sample
+                if new_scales is not None:
+                    self.set_scales(new_scales)
+                    with scales_path.open(mode="w") as scale_file:
+                        yaml.dump(self.scales, scale_file)
+                else:
+                    logger.warning("No valid scales obtained from generated samples")
             
             for j in samples_ids:
 

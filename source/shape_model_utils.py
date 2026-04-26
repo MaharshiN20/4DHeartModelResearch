@@ -17,6 +17,8 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 import vtk
+# Suppress VTK rendering warnings on headless systems
+vtk.vtkRenderingCore.vtkRenderWindow.GlobalWarningDisplayOn = False
 from scipy.signal import find_peaks
 
 import source.utils as utils
