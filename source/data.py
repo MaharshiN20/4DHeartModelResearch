@@ -392,165 +392,170 @@ class MeshDataset(ABC):
             Generates and saves the sample_id'th data sample to this_dataset_dir using the variation
             coefficients std_n which is in sample_params
         """
-        assert self.save_files
-        # reference poly to compute volumes
-        ref_poly = self.reference_poly
-        
-        # generate a sequence of shapes in a sequence of times t_seq
-        nb_cycles, time_per_cycle, cycle_shift, shapes_per_cycle, std_n = sample_params
-        
-        # min and max nb of cycles per minute
-        pulse_min, pulse_max = self.pulse_min, self.pulse_max
-        # min and max time per cycle (in sec)
-        time_per_cycle_min, time_per_cycle_max = 60 / pulse_max, 60 / pulse_min
-        # constraint the time_per_cycle to the range [time_per_cycle_min, time_per_cycle_max]
-        time_per_cycle = np.clip(time_per_cycle, time_per_cycle_min, time_per_cycle_max)
-
-        # ------------------------------------ Method 1 of data generation --------------------------------
-        # compute time values from cycle values
-        total_time = time_per_cycle * nb_cycles
-        time_shift = cycle_shift * time_per_cycle
-
-        total_generated_shapes = int(np.floor(shapes_per_cycle*nb_cycles)) # use np.floor to generate possibly 1 less shape
-                                                                        # for this nb of cycles (i,e less computation in the NN)
-        times = np.linspace(0, total_time, total_generated_shapes)
-
-        # the generator considers a range of length 1 as 1 cycle (e,g [0, 1] or [0.5, 1.5]),
-        # we want to generate "nb_cycles" starting at "cycle_shift", so we input a range of length "nb_cycles" 
-        # that starts at "cycle_shift" i,e [cycle_shift, nb_cycles+cycle_shift]
-        cycles_seq = np.linspace(cycle_shift, nb_cycles+cycle_shift, total_generated_shapes)
-        # -------------------------------------------------------------------------------------------------
-
-        feats = [] # feature matrices of the mesh video with above parameters
-
-        skip_low_ef = np.random.choice([True, False])
-        if low_efs and not skip_low_ef:
-            assert "leftVentricle" in self.components
-            # generate the 10 phases of 1 cycle, pick 2 frames as EDF and ESF then interpolate between them
-            phases = 10
-            seq_1_cycle = np.linspace(0, 0.9, phases)
-            cycle_feats = []
-            for cycle_point in seq_1_cycle:
-                feat = self._prepare_polydata(time=cycle_point, std_num=std_n, is_train=is_train)
-                cycle_feats.append(feat)
+        try:
+            assert self.save_files
+            # reference poly to compute volumes
+            ref_poly = self.reference_poly
             
-            # calculate lv volumes
-            volumes_lv = compute_volumes_feats(cycle_feats, ref_poly, components_list=["leftVentricle"])["leftVentricle"]
+            # generate a sequence of shapes in a sequence of times t_seq
+            nb_cycles, time_per_cycle, cycle_shift, shapes_per_cycle, std_n = sample_params
+            
+            # min and max nb of cycles per minute
+            pulse_min, pulse_max = self.pulse_min, self.pulse_max
+            # min and max time per cycle (in sec)
+            time_per_cycle_min, time_per_cycle_max = 60 / pulse_max, 60 / pulse_min
+            # constraint the time_per_cycle to the range [time_per_cycle_min, time_per_cycle_max]
+            time_per_cycle = np.clip(time_per_cycle, time_per_cycle_min, time_per_cycle_max)
 
-            # pick 2 different frames for EDF and ESF
-            ef_value = -1
-            while ef_value < 5: # only pick 2 frames such that ef value is at least 5
-                idx1 = np.random.randint(phases)
-                idx2 = np.random.randint(phases)
-                while idx1 == idx2:
-                    idx2 = np.random.randint(phases)
+            # ------------------------------------ Method 1 of data generation --------------------------------
+            # compute time values from cycle values
+            total_time = time_per_cycle * nb_cycles
+            time_shift = cycle_shift * time_per_cycle
+
+            total_generated_shapes = int(np.floor(shapes_per_cycle*nb_cycles)) # use np.floor to generate possibly 1 less shape
+                                                                            # for this nb of cycles (i,e less computation in the NN)
+            times = np.linspace(0, total_time, total_generated_shapes)
+
+            # the generator considers a range of length 1 as 1 cycle (e,g [0, 1] or [0.5, 1.5]),
+            # we want to generate "nb_cycles" starting at "cycle_shift", so we input a range of length "nb_cycles" 
+            # that starts at "cycle_shift" i,e [cycle_shift, nb_cycles+cycle_shift]
+            cycles_seq = np.linspace(cycle_shift, nb_cycles+cycle_shift, total_generated_shapes)
+            # -------------------------------------------------------------------------------------------------
+
+            feats = [] # feature matrices of the mesh video with above parameters
+
+            skip_low_ef = np.random.choice([True, False])
+            if low_efs and not skip_low_ef:
+                assert "leftVentricle" in self.components
+                # generate the 10 phases of 1 cycle, pick 2 frames as EDF and ESF then interpolate between them
+                phases = 10
+                seq_1_cycle = np.linspace(0, 0.9, phases)
+                cycle_feats = []
+                for cycle_point in seq_1_cycle:
+                    feat = self._prepare_polydata(time=cycle_point, std_num=std_n, is_train=is_train)
+                    cycle_feats.append(feat)
                 
-                vols = [volumes_lv[idx1], volumes_lv[idx2]]
-                min_vol = min(vols)
-                max_vol = max(vols)
-                ef_value = ((max_vol - min_vol) / max_vol) * 100
+                # calculate lv volumes
+                volumes_lv = compute_volumes_feats(cycle_feats, ref_poly, components_list=["leftVentricle"])["leftVentricle"]
+
+                # pick 2 different frames for EDF and ESF
+                ef_value = -1
+                while ef_value < 5: # only pick 2 frames such that ef value is at least 5
+                    idx1 = np.random.randint(phases)
+                    idx2 = np.random.randint(phases)
+                    while idx1 == idx2:
+                        idx2 = np.random.randint(phases)
+                    
+                    vols = [volumes_lv[idx1], volumes_lv[idx2]]
+                    min_vol = min(vols)
+                    max_vol = max(vols)
+                    ef_value = ((max_vol - min_vol) / max_vol) * 100
+                
+                # gather frames in the same order as the cycle, keeping only frames with volumes
+                # in the range [min_vol, max_vol]
+                new_cycle_feats = []
+                new_volumes_lv = []
+                for i in range(len(cycle_feats)):
+                    if volumes_lv[i] >= min_vol and volumes_lv[i] <= max_vol:
+                        new_cycle_feats.append(cycle_feats[i])
+                        new_volumes_lv.append(volumes_lv[i])
+                # if last frame volume larger than first frame, then put last frame first
+                if new_volumes_lv[-1] > new_volumes_lv[0]:
+                    edf = new_cycle_feats[-1]
+                    l = [edf]
+                    l.extend(new_cycle_feats[:-1])
+                    new_cycle_feats = l
+                
+                # frames representing 1 cycle from EDF to ESF and back to EDF
+                cycle_feats = new_cycle_feats
+
+                for cycle_point in cycles_seq:
+                    cycle_point = self.remap_time(cycle_point) # remap cycle_point to range [0, 1)
+                    # select 2 frames based on the cycle_point, then linearly interpolate between them
+                    y_1, y_2, diff = self._get_y1_y2(len(cycle_feats), cycle_point)
+                    feat_1 = cycle_feats[y_1]
+                    feat_2 = cycle_feats[y_2]
+                    feat = feat_1 + diff * (feat_2 - feat_1) # linear interpolate
+                    feats.append(feat)
+            else:
+                # generate the feature matrix at each cycle point
+                for cycle_point in cycles_seq:
+                    feat = self._prepare_polydata(time=cycle_point, std_num=std_n, is_train=is_train)
+                    assert (self.save_files or (feat >= 0).all())
+
+                    feats.append(feat)
             
-            # gather frames in the same order as the cycle, keeping only frames with volumes
-            # in the range [min_vol, max_vol]
-            new_cycle_feats = []
-            new_volumes_lv = []
-            for i in range(len(cycle_feats)):
-                if volumes_lv[i] >= min_vol and volumes_lv[i] <= max_vol:
-                    new_cycle_feats.append(cycle_feats[i])
-                    new_volumes_lv.append(volumes_lv[i])
-            # if last frame volume larger than first frame, then put last frame first
-            if new_volumes_lv[-1] > new_volumes_lv[0]:
-                edf = new_cycle_feats[-1]
-                l = [edf]
-                l.extend(new_cycle_feats[:-1])
-                new_cycle_feats = l
+            feats = np.stack(feats)
+
+            # compute the per-component-volumes for each feature matrix and each component in self.components
+            # note: these heart are unscaled, so we compute the volume over unscaled heart shapes
+            volumes = compute_volumes_feats(feats, ref_poly, components_list=self.components)
             
-            # frames representing 1 cycle from EDF to ESF and back to EDF
-            cycle_feats = new_cycle_feats
+            # concat the "component volumes" lists in the same order they appear in self.components
+            all_volumes = []
+            for c in self.components:
+                all_volumes.extend(volumes[c])
+            
+            ef_disks = 0
+            ef_vol = 0
+            if "leftVentricle" in volumes: # if computed volumes of left ventricle
+                # compute EF using disks method
+                volumes_lv = volumes["leftVentricle"]
+                ed_idx, es_idx = np.argmax(volumes_lv), np.argmin(volumes_lv)
+                ed_feats, es_feats = feats[ed_idx], feats[es_idx]
+                output_dir = None
+                try:
+                    ef_disks, _, _ = get_disk_method_ef(ed_feats, es_feats, ref_poly, ("4CH", "2CH"), slicing_ref_frame="EDF", output_dir=output_dir)
+                except Exception as e:
+                    logger.warning(f"Failed to compute EF using disk method for sample {sample_id}: {str(e)}")
+                    ef_disks = 0
+                # compute EF using volumes
+                max_vol, min_vol = max(volumes_lv), min(volumes_lv)
+                ef_vol = (max_vol - min_vol) / max_vol
+                ef_vol = ef_vol * 100.0
 
-            for cycle_point in cycles_seq:
-                cycle_point = self.remap_time(cycle_point) # remap cycle_point to range [0, 1)
-                # select 2 frames based on the cycle_point, then linearly interpolate between them
-                y_1, y_2, diff = self._get_y1_y2(len(cycle_feats), cycle_point)
-                feat_1 = cycle_feats[y_1]
-                feat_2 = cycle_feats[y_2]
-                feat = feat_1 + diff * (feat_2 - feat_1) # linear interpolate
-                feats.append(feat)
-        else:
-            # generate the feature matrix at each cycle point
-            for cycle_point in cycles_seq:
-                feat = self._prepare_polydata(time=cycle_point, std_num=std_n, is_train=is_train)
-                assert (self.save_files or (feat >= 0).all())
+            params = {
+                "nb_cycles": nb_cycles,
+                "time_per_cycle": time_per_cycle,
+                "shapes_per_cycle": shapes_per_cycle,
+                "cycle_shift": cycle_shift,
+                "time_shift": time_shift,
+                "frequency": 1/time_per_cycle,
+                "EF_Vol": ef_vol,
+                "EF_Biplane": ef_disks
+            }
 
-                feats.append(feat)
-        
-        feats = np.stack(feats)
+            params_list = []
+            for p in CONRAD_DATA_PARAMS: # append params in the same order they are in the CONRAD_DATA_PARAMS list
+                params_list.append(params[p])
+            
+            filename = f"{this_dataset_dir.name}_{sample_id:06d}"
+            file = this_dataset_dir / filename
+            np.savez_compressed(f'{file}.npz', feat_matrix=feats, times=times, all_volumes=all_volumes, params=params_list)
 
-        # compute the per-component-volumes for each feature matrix and each component in self.components
-        # note: these heart are unscaled, so we compute the volume over unscaled heart shapes
-        volumes = compute_volumes_feats(feats, ref_poly, components_list=self.components)
-        
-        # concat the "component volumes" lists in the same order they appear in self.components
-        all_volumes = []
-        for c in self.components:
-            all_volumes.extend(volumes[c])
-        
-        ef_disks = 0
-        ef_vol = 0
-        if "leftVentricle" in volumes: # if computed volumes of left ventricle
-            # compute EF using disks method
-            volumes_lv = volumes["leftVentricle"]
-            ed_idx, es_idx = np.argmax(volumes_lv), np.argmin(volumes_lv)
-            ed_feats, es_feats = feats[ed_idx], feats[es_idx]
-            output_dir = None
-            try:
-                ef_disks, _, _ = get_disk_method_ef(ed_feats, es_feats, ref_poly, ("4CH", "2CH"), slicing_ref_frame="EDF", output_dir=output_dir)
-            except Exception as e:
-                logger.warning(f"Failed to compute EF using disk method: {str(e)}")
-                ef_disks = 0
-            # compute EF using volumes
-            max_vol, min_vol = max(volumes_lv), min(volumes_lv)
-            ef_vol = (max_vol - min_vol) / max_vol
-            ef_vol = ef_vol * 100.0
+            # save mesh video as .avi file
+            mesh_vid = feats
+            vid_out_dir = this_dataset_dir.parent / "videos" / this_dataset_dir.name
+            vid_duration = total_time
+            save_mesh_vid(mesh_vid, self, vid_duration, vid_out_dir, filename, rescale=False)
 
-        params = {
-            "nb_cycles": nb_cycles,
-            "time_per_cycle": time_per_cycle,
-            "shapes_per_cycle": shapes_per_cycle,
-            "cycle_shift": cycle_shift,
-            "time_shift": time_shift,
-            "frequency": 1/time_per_cycle,
-            "EF_Vol": ef_vol,
-            "EF_Biplane": ef_disks
-        }
+            sample_scales = {}
+            sample_scales["x_min"] = np.min(feats[:, :, 0])
+            sample_scales["x_max"] = np.max(feats[:, :, 0])
+            sample_scales["y_min"] = np.min(feats[:, :, 1])
+            sample_scales["y_max"] = np.max(feats[:, :, 1])
+            sample_scales["z_min"] = np.min(feats[:, :, 2])
+            sample_scales["z_max"] = np.max(feats[:, :, 2])
 
-        params_list = []
-        for p in CONRAD_DATA_PARAMS: # append params in the same order they are in the CONRAD_DATA_PARAMS list
-            params_list.append(params[p])
-        
-        filename = f"{this_dataset_dir.name}_{sample_id:06d}"
-        file = this_dataset_dir / filename
-        np.savez_compressed(f'{file}.npz', feat_matrix=feats, times=times, all_volumes=all_volumes, params=params_list)
-
-        # save mesh video as .avi file
-        mesh_vid = feats
-        vid_out_dir = this_dataset_dir.parent / "videos" / this_dataset_dir.name
-        vid_duration = total_time
-        save_mesh_vid(mesh_vid, self, vid_duration, vid_out_dir, filename, rescale=False)
-
-        sample_scales = {}
-        sample_scales["x_min"] = np.min(feats[:, :, 0])
-        sample_scales["x_max"] = np.max(feats[:, :, 0])
-        sample_scales["y_min"] = np.min(feats[:, :, 1])
-        sample_scales["y_max"] = np.max(feats[:, :, 1])
-        sample_scales["z_min"] = np.min(feats[:, :, 2])
-        sample_scales["z_max"] = np.max(feats[:, :, 2])
-
-        return_data = {}
-        return_data["scales"] = sample_scales
-        return_data["params"] = params
-        return_data["FileName"] = filename
-        return_dict[sample_id] = return_data
+            return_data = {}
+            return_data["scales"] = sample_scales
+            return_data["params"] = params
+            return_data["FileName"] = filename
+            return_dict[sample_id] = return_data
+        except Exception as e:
+            logger.error(f"CRITICAL ERROR in generate_and_save for sample {sample_id}: {str(e)}", exc_info=True)
+            # Still add a placeholder to prevent empty return_dict
+            return_dict[sample_id] = {"error": str(e), "scales": None, "params": None, "FileName": None}
     
     def get_dataset_from_disk(self, set_name, n_samples, batch_size=None, repeat=False, return_filepaths=False):
         if n_samples is None:
@@ -734,8 +739,16 @@ class MeshDataset(ABC):
                     if j not in list(return_dict.keys()):
                         logger.warning(f"{j} not in return dict.")
                         continue
+                    
+                    # Skip if sample has error or no scales
+                    if "error" in return_dict[j]:
+                        logger.error(f"Sample {j} encountered error: {return_dict[j]['error']}")
+                        continue
 
-                    sample_scales_j = return_dict[j]["scales"]
+                    sample_scales_j = return_dict[j].get("scales", None)
+                    if sample_scales_j is None:
+                        logger.warning(f"Sample {j} has no scales")
+                        continue
                     new_scales = self.pick_scales(new_scales, sample_scales_j)
                 
                 # only set scales if we successfully got them from at least one sample
@@ -744,16 +757,24 @@ class MeshDataset(ABC):
                     with scales_path.open(mode="w") as scale_file:
                         yaml.dump(self.scales, scale_file)
                 else:
-                    logger.warning("No valid scales obtained from generated samples")
+                    logger.warning("No valid scales obtained from any generated samples")
             
             for j in samples_ids:
 
                 if j not in list(return_dict.keys()):
                     logger.warning(f"{j} not in return dict.")
                     continue
+                
+                # Skip if sample has error
+                if "error" in return_dict[j]:
+                    logger.warning(f"Skipping failed sample {j}")
+                    continue
 
-                params = return_dict[j]["params"]
-                filename = return_dict[j]["FileName"]
+                params = return_dict[j].get("params", None)
+                filename = return_dict[j].get("FileName", None)
+                if params is None or filename is None:
+                    logger.warning(f"Sample {j} missing params or filename")
+                    continue
                 samples_params["FileName"].append(filename)
                 for p in params:
                     if p in samples_params:
