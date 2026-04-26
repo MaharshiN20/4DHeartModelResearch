@@ -533,11 +533,13 @@ class MeshDataset(ABC):
             file = this_dataset_dir / filename
             np.savez_compressed(f'{file}.npz', feat_matrix=feats, times=times, all_volumes=all_volumes, params=params_list)
 
-            # save mesh video as .avi file
-            mesh_vid = feats
-            vid_out_dir = this_dataset_dir.parent / "videos" / this_dataset_dir.name
-            vid_duration = total_time
-            save_mesh_vid(mesh_vid, self, vid_duration, vid_out_dir, filename, rescale=False)
+            # Skip video saving in parallel training to avoid VTK render window creation in headless mode
+            # Videos are not required for training, only for visualization
+            # if needed, can be generated separately after training
+            # mesh_vid = feats
+            # vid_out_dir = this_dataset_dir.parent / "videos" / this_dataset_dir.name
+            # vid_duration = total_time
+            # save_mesh_vid(mesh_vid, self, vid_duration, vid_out_dir, filename, rescale=False)
 
             sample_scales = {}
             sample_scales["x_min"] = np.min(feats[:, :, 0])

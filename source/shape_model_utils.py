@@ -17,8 +17,9 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 import os
-# Suppress VTK rendering warnings on headless systems before importing vtk
+# Suppress VTK rendering warnings and disable X11-dependent rendering for headless systems
 os.environ['VTK_LOG_VERBOSITY'] = 'ERROR'
+os.environ['VTK_RENDERER_VOLUMEPRO_DISABLE'] = '1'
 import vtk
 from scipy.signal import find_peaks
 
