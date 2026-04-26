@@ -499,13 +499,16 @@ class MeshDataset(ABC):
             ef_disks = 0
             ef_vol = 0
             if "leftVentricle" in volumes: # if computed volumes of left ventricle
-            # compute EF using disks method - SKIPPED during training to avoid VTK render window creation
-            # This causes segfaults on headless systems and is not required for training
-            # Can be computed separately for analysis/metrics after training completes
-            volumes_lv = volumes["leftVentricle"]
-            ed_idx, es_idx = np.argmax(volumes_lv), np.argmin(volumes_lv)
-            # Skip disk method EF - use volume-based EF instead
-            ef_disks = 0  # Will be skipped
+                # compute EF using disks method - SKIPPED during training to avoid VTK render window creation
+                # This causes segfaults on headless systems and is not required for training
+                # Can be computed separately for analysis/metrics after training completes
+                volumes_lv = volumes["leftVentricle"]
+                ed_idx, es_idx = np.argmax(volumes_lv), np.argmin(volumes_lv)
+                # Skip disk method EF - use volume-based EF instead
+                ef_disks = 0  # Will be skipped
+                # compute EF using volumes
+                max_vol, min_vol = max(volumes_lv), min(volumes_lv)
+                ef_vol = (max_vol - min_vol) / max_vol
                 ef_vol = ef_vol * 100.0
 
             params = {
