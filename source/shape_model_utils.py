@@ -673,8 +673,7 @@ def get_4ch_slicing_plane(poly):
     v1 = lv_annulus_mean - lv_apex_mean  # vector in the slicing plane
     v2 = rv_apex_mean - lv_apex_mean  # another vector in the slicing plane
     normal = np.cross(v1, v2)  # use cross product to get vector perpendicular to both v1 and v2
-    with np.errstate(divide='ignore', invalid='ignore'):
-        normal = normal / np.linalg.norm(normal)  # normalize vector (suppress div-by-zero warnings)
+    normal = normal / np.linalg.norm(normal)  # normalize vector
     origin = (
                          lv_annulus_mean + lv_apex_mean) / 2  # origin in middle between apex and annulus center
 
@@ -682,10 +681,6 @@ def get_4ch_slicing_plane(poly):
 
 
 def disks_volume_from_segs(views_segs, view_pair):
-    # Check if both views exist in segmentation data
-    if view_pair[0] not in views_segs or view_pair[1] not in views_segs:
-        return None
-    
     view1_segs = views_segs[view_pair[0]]
     view2_segs = views_segs[view_pair[1]]
 
@@ -751,15 +746,13 @@ def get_disk_method_ef(ed_feats, es_feats, ref_poly, view_pair, slicing_ref_fram
 
     lax_p1, lax_p2, _ = points
     lax_vect = lax_p2 - lax_p1  # vector around which to rotate the normal
-    with np.errstate(divide='ignore', invalid='ignore'):
-        lax_vect = lax_vect / np.linalg.norm(lax_vect)  # normalize (suppress warnings)
+    lax_vect = lax_vect / np.linalg.norm(lax_vect)  # normalize
 
     # rotate 4CH normal by 60 degrees around lax_vect to get 2CH normal
     transform = vtk.vtkTransform()
     transform.RotateWXYZ(60, lax_vect)
     normal_2ch = np.array(transform.TransformPoint(normal_4ch))
-    with np.errstate(divide='ignore', invalid='ignore'):
-        normal_2ch = normal_2ch / np.linalg.norm(normal_2ch)  # normalize (suppress warnings)
+    normal_2ch = normal_2ch / np.linalg.norm(normal_2ch)  # normalize
 
     edv = 0
     esv = 0
@@ -785,11 +778,6 @@ def get_disk_method_ef(ed_feats, es_feats, ref_poly, view_pair, slicing_ref_fram
 
             lv_frame = render_poly_lax_vertical(slice_lv, origin, normal, -lax_vect)
             lax_bottom_p1, lax_bottom_p2, lax_top, hull = get_lax_points(lv_frame)
-            
-            # Skip this sample if hull extraction failed
-            if lax_bottom_p1 is None:
-                continue
-            
             lax_bottom_mid = np.rint((lax_bottom_p1 + lax_bottom_p2) / 2).astype('int32')
 
             # turn to black and white
@@ -850,15 +838,7 @@ def get_disk_method_ef(ed_feats, es_feats, ref_poly, view_pair, slicing_ref_fram
                 images_dir.mkdir(parents=True, exist_ok=True)
                 cv2.imwrite(str(images_dir / f"{which_frame}_{view}.png"), lv_frame)
 
-        vol = None
-        # Check if both required views exist in segmentation data
-        if view_pair[0] in views_segs and view_pair[1] in views_segs:
-            vol = disks_volume_from_segs(views_segs, view_pair)
-        
-        if vol is None:
-            # Skip this sample if volume cannot be computed
-            continue
-        
+        vol = disks_volume_from_segs(views_segs, view_pair)
         if which_frame == "EDF":
             edv = vol
         elif which_frame == "ESF":
@@ -1211,17 +1191,7 @@ def get_lax_points(lv_countour, is_thresholded=False):
                                    axis=1)  # swap colums
 
     # hull points in counter-clockwise direction
-    hull = cv2.convexHull(pixel_indices)
-    hull = np.squeeze(hull)
-    
-    # Ensure hull is always 2D (handle case where squeeze collapses it to 1D or 0D)
-    if hull.ndim == 0:
-        # Degenerate case: only 1 point
-        return None, None, None, None
-    if hull.ndim == 1:
-        # Only 2 points (a line segment)
-        hull = hull.reshape(1, -1)
-    
+    hull = np.squeeze(cv2.convexHull(pixel_indices))
     # create list of point pairs representing the hull lines
     hull_rot = np.concatenate([hull[1:], hull[0, None]], axis=0)
     points_pairs = list(zip(hull, hull_rot))
@@ -1261,17 +1231,11 @@ def render_poly_lax_vertical(poly, origin, normal, lax_vect, size=None):
 
 def render_poly_from_camera_params(poly, camera_params, size, colors=None, parallel_zoom=False, p_zoom=90, return_bgr=False):
 
-    comps_array = poly.GetPointData().GetArray('components')
-    if comps_array is None:
-        # If no components array, render as a single component
-        avail_comps = np.array([0])
-    else:
-        avail_comps = np.unique(vtk_to_numpy(comps_array)).astype(np.int32)
-    
+    avail_comps = np.unique(vtk_to_numpy(poly.GetPointData().GetArray('components'))).astype(np.int32)
     # set up rendered and add polys to render to it
     renderer = vtk.vtkRenderer()
     for comp_id in avail_comps:
-        comp_name = constants.CONRAD_IDS_TO_COMPONENTS.get(comp_id, "unknown")
+        comp_name = constants.CONRAD_IDS_TO_COMPONENTS[comp_id]
         if colors is not None and comp_name in colors:
             color = colors[comp_name]
         else:
@@ -1372,8 +1336,7 @@ def slice_poly(poly, origin, normal):
 def extract_component(poly, component):
     thresholdfilter = vtk.vtkThreshold()
     thresholdfilter.SetInputData(poly)
-    thresholdfilter.SetLowerThreshold(component)
-    thresholdfilter.SetUpperThreshold(component)
+    thresholdfilter.ThresholdBetween(component, component)
     thresholdfilter.Update()
     component_poly = thresholdfilter.GetOutput()
     return component_poly
@@ -1388,30 +1351,30 @@ def get_mean_point(polys):
 
 
 def extract_component_cells(poly, component, cells_ids):
-    thresholdfilter = vtk.vtkThreshold()
-    thresholdfilter.SetInputData(poly)
-    thresholdfilter.SetLowerThreshold(component)
-    thresholdfilter.SetUpperThreshold(component)
-    thresholdfilter.Update()
-    component_poly = thresholdfilter.GetOutput()
+    """Extract component cells using numpy instead of VTK threshold for compatibility"""
+    # Get cell data and extract component cells
+    cell_data = poly.GetCellData()
+    
+    # Create output polydata for component
+    component_poly = vtk.vtkPolyData()
+    component_poly.DeepCopy(poly)
+    
+    # Extract selection using vtkExtractSelectedIds
+    selectionNode = vtk.vtkSelectionNode()
+    selectionNode.SetFieldType(vtk.vtkSelectionNode.CELL)
+    selectionNode.SetContentType(vtk.vtkSelectionNode.INDICES)
+    selectionNode.SetSelectionList(numpy_to_vtk(cells_ids))
 
-    # Manually extract cells by IDs without using vtkExtractSelection
-    # Convert cell IDs to numpy and get the subset of the component_poly's cells
-    cells_ids_set = set(cells_ids)
-    
-    # Create a new polydata with only the cells we want
-    extracted_poly = vtk.vtkPolyData()
-    extracted_poly.SetPoints(component_poly.GetPoints())
-    
-    # Copy cells that match the requested IDs
-    new_cells = vtk.vtkCellArray()
-    for cell_id in cells_ids_set:
-        if cell_id < component_poly.GetNumberOfCells():
-            cell = component_poly.GetCell(cell_id)
-            new_cells.InsertNextCell(cell)
-    
-    extracted_poly.SetPolys(new_cells)
-    
+    selection = vtk.vtkSelection()
+    selection.AddNode(selectionNode)
+
+    extractSelectedIds = vtk.vtkExtractSelectedIds()
+    extractSelectedIds.SetInputData(0, poly)
+    extractSelectedIds.SetInputData(1, selection)
+    extractSelectedIds.Update()
+
+    extracted_poly = extractSelectedIds.GetOutput()
+
     return component_poly, extracted_poly
 
 def save_feats_as_vtps(feats, mesh_data_handler, output_dir, prefix):
@@ -2291,8 +2254,7 @@ def generate_seg_maps(poly_data, heart_components=[], views=None,
                 poly = cut[0][0]
                 thresholdfilter = vtk.vtkThreshold()
                 thresholdfilter.SetInputData(poly)
-                thresholdfilter.SetLowerThreshold(-0.5 + c_idx)
-                thresholdfilter.SetUpperThreshold(c_idx + 0.5)
+                thresholdfilter.ThresholdBetween(-0.5 + c_idx, c_idx + 0.5)
 
                 thresholdfilter.Update()
                 part = thresholdfilter.GetOutput()
