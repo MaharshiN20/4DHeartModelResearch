@@ -1292,7 +1292,7 @@ def main():
                         type=lambda p: Path(p).absolute(),
                         help='specify the folder containing the shape model')
     parser.add_argument('--echo_dir',
-                        default="/media/fabian/Extreme SSD/PhD/DATA/ECHO/",
+                        default="/home/mnaik/expanse/expanse/data/EchoNet-Dynamic",
                         type=lambda p: Path(p).absolute(),
                         help='specify the folder containing echo data.')
     parser.add_argument('--results_dir',
