@@ -16,9 +16,10 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 import numpy as np
 import pandas as pd
 import networkx as nx
+import os
+# Suppress VTK rendering warnings on headless systems before importing vtk
+os.environ['VTK_LOG_VERBOSITY'] = 'ERROR'
 import vtk
-# Suppress VTK rendering warnings on headless systems
-vtk.vtkRenderingCore.vtkRenderWindow.GlobalWarningDisplayOn = False
 from scipy.signal import find_peaks
 
 import source.utils as utils

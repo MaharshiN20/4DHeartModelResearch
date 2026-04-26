@@ -7,9 +7,10 @@ import string
 import random, time
 from typing import List
 import source.utils as utils
+import os
+# Suppress VTK rendering warnings on headless systems before importing vtk
+os.environ['VTK_LOG_VERBOSITY'] = 'ERROR'
 import vtk
-# Use offscreen rendering for VTK on headless systems (no X11 display)
-vtk.vtkRenderingCore.vtkRenderWindow.GlobalWarningDisplayOn = False
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
