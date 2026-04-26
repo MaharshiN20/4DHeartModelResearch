@@ -20,4 +20,4 @@ export DISPLAY=
 
 cd /home/mnaik/expanse/4DHeartModel_trimesh
 source myenv_trimesh/bin/activate
-python3 run_generative_heart_model.py source/configs/generative_model --mode=dhb_eae
+python3 run_generative_heart_model.py source/configs/generative_model --mode=dhb_eae --echo_dir=/home/mnaik/expanse/data/EchoNet-Dynamic
